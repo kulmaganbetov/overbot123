@@ -5,19 +5,29 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "start": "next start"
+    "start": "next start",
+    "update:dealer": "tsx ./scripts/updateDealer.ts",
+    "start:scheduler": "tsx ./scripts/scheduler.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.18.0",
+    "basic-ftp": "^5.0.5",
+    "iconv-lite": "^0.7.0",
+    "next": "16.0.0",
+    "openai": "^6.6.0",
+    "papaparse": "^5.5.3",
+    "pg": "^8.16.3",
+    "prisma": "^6.18.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "next": "16.0.0"
+    "react-dom": "19.2.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/papaparse": "^5.3.16",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
