@@ -1,11 +1,9 @@
-// scripts/updateDealer.ts
 import { Client } from "basic-ftp"
 import "dotenv/config"
 import fs from "fs"
 import path from "path"
 import Papa, { ParseResult } from "papaparse"
 import iconv from "iconv-lite"
-import { openai } from "@/lib/openai"
 
 const FTP_CONFIG = {
   host: process.env.FTP_HOST || "over-shop.kz",
@@ -14,41 +12,52 @@ const FTP_CONFIG = {
   port: Number(process.env.FTP_PORT || 21),
 }
 
-const REMOTE_PATH = "/Dealer.csv"
+const REMOTE_PATH = "/_FTP/zoomos1/Dealer.csv"
 const LOCAL_CSV_PATH = path.join(process.cwd(), "public", "Dealer.csv")
 const LOCAL_JSON_PATH = path.join(process.cwd(), "public", "dealer.json")
-const LOCAL_VECTORS_PATH = path.join(process.cwd(), "public", "dealer_vectors.json")
 
 export async function updateDealerFile() {
   const client = new Client()
-  client.ftp.verbose = true
+  ;(client.ftp as any).verbose = true
 
   try {
     console.log("📡 Подключаемся к FTP...")
-    await client.access({ ...FTP_CONFIG, secure: false })
-    client.ftp.socket?.setTimeout(15000)
+
+    // ⚙️ Настройка соединения
+    ;(client.ftp as any).useEPSV = false
+    ;(client.ftp as any).socketTimeout = 20000
+
+    await client.access({
+      host: FTP_CONFIG.host,
+      user: FTP_CONFIG.user,
+      password: FTP_CONFIG.password,
+      port: FTP_CONFIG.port,
+      secure: false,
+    } as any)
 
     console.log("⬇️ Скачиваем Dealer.csv...")
-    await client.downloadTo(LOCAL_CSV_PATH, REMOTE_PATH)
-    console.log("✅ Dealer.csv скачан:", new Date().toLocaleString())
 
-    // читаем CSV
+    try {
+      await client.downloadTo(LOCAL_CSV_PATH, REMOTE_PATH)
+      console.log("✅ Dealer.csv успешно скачан:", new Date().toLocaleString())
+    } catch (ftpErr) {
+      console.warn("⚠️ FTP не сработал, пробуем HTTPS-загрузку...")
+      await downloadViaHTTPS()
+    }
+
+    // 🔤 Декодируем CSV
     const buffer = fs.readFileSync(LOCAL_CSV_PATH)
     const text = iconv.decode(buffer, "win1251")
     console.log("🔤 Используем кодировку CP1251 (Windows-1251)")
 
-    // парсим CSV
+    // 📊 Парсим CSV
     let parsed: ParseResult<Record<string, string>> = Papa.parse(text, {
       header: true,
       skipEmptyLines: true,
       delimiter: ";",
     })
 
-    if (
-      parsed.data.length === 0 ||
-      !parsed.data[0] ||
-      !("Номенклатура" in parsed.data[0])
-    ) {
+    if (!parsed.data.length || !parsed.data[0]?.["Номенклатура"]) {
       parsed = Papa.parse<Record<string, string>>(text, {
         header: true,
         skipEmptyLines: true,
@@ -60,6 +69,7 @@ export async function updateDealerFile() {
     console.log("📊 Прочитано строк:", parsed.data.length)
     console.log("🧾 Заголовки:", Object.keys(parsed.data[0] || {}))
 
+    // 🧮 Преобразуем в JSON
     const products = parsed.data
       .filter((p) => p["Номенклатура"])
       .map((p) => ({
@@ -81,48 +91,35 @@ export async function updateDealerFile() {
       }))
 
     fs.writeFileSync(LOCAL_JSON_PATH, JSON.stringify(products, null, 2), "utf8")
-    console.log(`💾 Обновлено ${products.length} товаров в dealer.json`)
-
-    // 🧠 Создание векторного индекса
-    await createVectorIndex(products)
-  } catch (err) {
+    console.log(`💾 Обновлено ${products.length} товаров в dealer.json ✅`)
+  } catch (err: any) {
+    if (err.code === "ECONNRESET") {
+      console.log("⚠️ Соединение сброшено сервером, пробуем снова через 3 секунды...")
+      await new Promise((r) => setTimeout(r, 3000))
+      return updateDealerFile()
+    }
     console.error("❌ Ошибка при обновлении Dealer.csv:", err)
   } finally {
     client.close()
   }
 }
 
-async function createVectorIndex(products: any[]) {
-  console.log("🧠 Создание векторного индекса (батчами) + keywords...")
-  const LOCAL_VECTORS_PATH = path.join(process.cwd(), "public", "dealer_vectors.json")
-  const batchSize = 400
-  const total = Math.min(products.length, 10000)
-  const allVectors: { sku: string; vector: number[]; keywords?: string }[] = []
-
-  for (let i = 0; i < total; i += batchSize) {
-    const batch = products.slice(i, i + batchSize)
-    const texts = batch.map((p) => {
-      // keywords: объединяем поля для лучшего match
-      const kw = [p.name, p.brand, p.category, p.article, p.sku, p.kaspiCode].filter(Boolean).join(" ")
-      return `${kw}`
-    })
-
-    console.log(`➡️ Обрабатываем ${i + 1}–${i + batch.length} / ${total}`)
-    const embeddings = await openai.embeddings.create({ model: "text-embedding-3-small", input: texts })
-    const vectors = embeddings.data.map((e: any, idx: number) => ({
-      sku: batch[idx].sku,
-      vector: e.embedding,
-      keywords: texts[idx],
-    }))
-    allVectors.push(...vectors)
+// 🌐 Альтернатива — загрузка через HTTPS
+async function downloadViaHTTPS() {
+  try {
+    const httpsUrl = "https://over-shop.kz/_FTP/zoomos1/Dealer.csv"
+    console.log("🌐 Пробуем скачать через HTTPS:", httpsUrl)
+    const res = await fetch(httpsUrl)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.arrayBuffer()
+    fs.writeFileSync(LOCAL_CSV_PATH, Buffer.from(data))
+    console.log("✅ Dealer.csv скачан через HTTPS")
+  } catch (httpErr) {
+    console.error("❌ Ошибка при HTTPS-загрузке:", httpErr)
   }
-
-  fs.writeFileSync(LOCAL_VECTORS_PATH, JSON.stringify(allVectors, null, 2), "utf8")
-  console.log(`✅ Векторный индекс сохранен (${allVectors.length} записей)`)
 }
 
-
-
+// 🚀 Автозапуск
 if (require.main === module) {
   updateDealerFile().catch((err) => {
     console.error(err)

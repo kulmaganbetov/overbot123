@@ -3,19 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "start /B npx tsx ./scripts/scheduler.ts && next dev --webpack",
+    "start": "start /B npx tsx ./scripts/scheduler.ts && next start",
     "build": "next build --webpack",
-    "start": "next start",
-    "update:dealer": "tsx ./scripts/updateDealer.ts",
-    "start:scheduler": "tsx ./scripts/scheduler.ts"
+    "update:dealer": "npx tsx ./scripts/updateDealer.ts",
+    "start:scheduler": "npx tsx ./scripts/scheduler.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
     "basic-ftp": "^5.0.5",
     "iconv-lite": "^0.7.0",
+    "mammoth": "^1.11.0",
     "next": "16.0.0",
     "openai": "^6.6.0",
     "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.16.3",
     "prisma": "^6.18.0",
     "react": "19.2.0",
