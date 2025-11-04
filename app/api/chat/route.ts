@@ -5,8 +5,7 @@ import { cookies } from "next/headers"
 import fs from "fs"
 import path from "path"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
-const pdfParse = require("pdf-parse")
-const mammoth = require("mammoth")
+
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
 
@@ -36,35 +35,50 @@ if (contentType.includes("multipart/form-data")) {
   if (file) {
     console.log(`📎 Прикреплён файл: ${file.name}`)
 
+    // 📂 сохраняем файл во временную директорию
     const uploadDir = path.join(process.cwd(), "tmp", "uploads")
     fs.mkdirSync(uploadDir, { recursive: true })
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const savePath = path.join(uploadDir, file.name)
     fs.writeFileSync(savePath, buffer)
 
-    // 🧩 Извлечение текста
+    // 🧩 Определяем расширение и извлекаем текст
     const ext = path.extname(file.name).toLowerCase()
     let extractedText = ""
 
-    if (ext === ".txt") {
-      extractedText = buffer.toString("utf8")
-    } else if (ext === ".pdf") {
-      const data = await pdfParse(buffer)
-      extractedText = data.text
-    } else if (ext === ".docx") {
-      const result = await mammoth.extractRawText({ buffer })
-      extractedText = result.value
-    } else {
-      console.warn("⚠️ Неподдерживаемый тип файла:", ext)
+    try {
+      if (ext === ".txt") {
+        extractedText = buffer.toString("utf8")
+      } else if (ext === ".pdf") {
+        // ✅ Исправленный динамический импорт pdf-parse
+        const pdfParseModule = await import("pdf-parse")
+        const pdfParse = (pdfParseModule as any).default || pdfParseModule
+        const data = await pdfParse(buffer)
+        extractedText = data.text
+      } else if (ext === ".docx") {
+        // ✅ Исправленный динамический импорт mammoth
+        const mammothModule = await import("mammoth")
+        const mammoth = (mammothModule as any).default || mammothModule
+        const result = await mammoth.extractRawText({ buffer })
+        extractedText = result.value
+      } else {
+        console.warn("⚠️ Неподдерживаемый тип файла:", ext)
+      }
+    } catch (err) {
+      console.error("❌ Ошибка при парсинге файла:", err)
     }
 
-    // 🔍 Добавляем содержимое файла в вопрос
+    // 🔍 Добавляем содержимое файла в вопрос к GPT
     if (extractedText) {
+      const preview = extractedText.slice(0, 4000)
+      question += `\n\n📎 Содержимое файла (${file.name}):\n${preview}`
       console.log(`📄 Извлечено ${extractedText.length} символов из ${file.name}`)
-      question += `\n\nФайл (${file.name}) содержит:\n${extractedText.slice(0, 4000)}`
     }
   }
+
+
 
 } else {
   // старый вариант JSON-запроса
