@@ -7,7 +7,12 @@ import path from "path"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+const BASE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  (process.env.VERCEL_URL
+    ? `https://overbot123.vercel.app`
+    : "http://localhost:3000")
+
 
 // 📦 Подгрузка товаров
 function loadProducts() {
