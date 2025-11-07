@@ -4,25 +4,53 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import logo from "@/../public/logo2.svg"
 import { Orbitron } from "next/font/google"
+import { Rubik } from "next/font/google"
+
 
 const orbitron = Orbitron({
   subsets: ["latin"],
   weight: ["400", "500"],
 })
 
-const EMOJIS = ["😀", "😂", "🤔", "😎", "😍", "😅", "🔥", "👏", "💡", "👍"]
+const rubik = Rubik({
+  subsets: ["latin", "cyrillic"],
+  weight: ["400", "500", "600"],
+})
+
+// 👇 Компонент анимированного текста
+function TypingIntro({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState("")
+
+  useEffect(() => {
+    let i = 0
+    const interval = setInterval(() => {
+      setDisplayed(text.slice(0, i + 1))
+      i++
+      if (i === text.length) clearInterval(interval)
+    }, 50) // скорость печати
+    return () => clearInterval(interval)
+  }, [text])
+
+  return (
+    <div className="text-center text-gray-600 text-lg font-normal tracking-wide">
+      {displayed}
+      <span className="animate-pulse">▌</span>
+    </div>
+  )
+}
 
 export default function Home() {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<
-    { user: string; bot: string; time: string; file?: string; reaction?: string }[]
+    { user: string; bot: string; time: string; file?: string }[]
   >([])
   const [loading, setLoading] = useState(false)
   const [typingDots, setTypingDots] = useState(".")
   const [file, setFile] = useState<File | null>(null)
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // typing animation
   useEffect(() => {
     if (!loading) return
     const interval = setInterval(() => {
@@ -31,9 +59,18 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [loading])
 
+  // scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  // auto height for textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px"
+    }
+  }, [input])
 
   async function sendMessage() {
     if (!input.trim() && !file) return
@@ -56,8 +93,7 @@ export default function Home() {
 
       const res = await fetch("/api/chat", { method: "POST", body: formData })
       if (!res.ok) throw new Error(`Ошибка запроса: ${res.status}`)
-      const text = await res.text()
-      const data = JSON.parse(text)
+      const data = await res.json()
 
       const botTime = new Date().toLocaleTimeString("ru-RU", {
         hour: "2-digit",
@@ -86,165 +122,114 @@ export default function Home() {
   }
 
   function handleKeyPress(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Shift+Enter = перенос строки
+    if (e.key === "Enter" && e.shiftKey) return
+    // Enter = отправка
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
     }
   }
 
-  function addEmoji(emoji: string) {
-    setInput((prev) => prev + emoji)
-    setShowEmojiPicker(false)
-  }
-
-  function addReaction(index: number, emoji: string) {
-    setMessages((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, reaction: emoji } : m))
-    )
-  }
-
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-orange-50 via-orange-100 to-white p-4">
-      <div className="w-full max-w-lg bg-white shadow-2xl rounded-2xl p-6 flex flex-col h-[85vh] border border-orange-200">
+    <div className="flex flex-col h-screen bg-[#f9f9f9] text-gray-800">
+  {/* HEADER */}
+  <header className="hidden md:flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
+    <div className="flex items-center gap-3">
+      <Image src={logo} alt="Over-Shop.kz" width={120} height={120} />
 
-        {/* HEADER */}
-        <div className="flex flex-col items-center mb-5 border-b border-orange-200 pb-4">
-          <div className="relative">
-            <div className="absolute inset-0 blur-lg bg-orange-400/40 rounded-full scale-125"></div>
-            <Image src={logo} alt="Over-Shop.kz Logo" width={150} height={150} className="relative drop-shadow-md" priority />
-          </div>
-          <h1 className={`${orbitron.className} text-3xl md:text-xl font-extrabold text-orange-600 mt-2 text-center leading-tight tracking-wide`}>
-            🤖 Роберт — электронный помощник<br />
-            <span className="text-gray-700 text-lg md:text-l tracking-tight">Over-Shop.kz</span>
-          </h1>
-        </div>
+      {/* Добавлен отступ сверху */}
+      <h1
+        className={`${rubik.className} text-base md:text-lg font-medium text-gray-900 mt-3`}
+      >
+        Роберт - электронный помощник over
+      </h1>
+    </div>
+    <span className="text-sl text-gray-500">Поддержка онлайн</span>
+  </header>
 
-        {/* CHAT */}
-        <div className="flex-1 overflow-y-auto mb-4 space-y-4 scrollbar-thin scrollbar-thumb-orange-300 scrollbar-track-orange-100">
-          {messages.map((m, i) => (
-            <div key={i}>
+      {/* CHAT */}
+      <main
+        className={`flex-1 overflow-y-auto transition-all duration-300 px-4 md:px-24 ${
+          messages.length === 0 ? "flex items-center justify-center" : "py-6 space-y-6"
+        }`}
+      >
+        {messages.length === 0 ? (
+          <TypingIntro text="Привет! Что на сегодня?" />
+        ) : (
+          messages.map((m, i) => (
+            <div key={i} className="space-y-2">
               {/* user */}
               <div className="flex justify-end">
-                <div className="bg-orange-500 text-white p-3 rounded-2xl rounded-br-none max-w-[80%] break-words">
+                <div className="bg-gray-100 px-4 py-3 rounded-2xl max-w-[70%]">
                   <p className="whitespace-pre-line">{m.user}</p>
                   {m.file && (
-                    <a href="#" className="text-xs underline text-white/90 block mt-1">
-                      📎 {m.file}
-                    </a>
+                    <p className="text-xs opacity-80 mt-1">📎 {m.file}</p>
                   )}
-                  <p className="text-xs opacity-70 text-right mt-1">{m.time.split("/")[0]}</p>
-                  {m.reaction && <p className="text-right text-lg">{m.reaction}</p>}
                 </div>
               </div>
 
               {/* bot */}
               {m.bot && (
-                <div className="flex flex-col justify-start mt-2">
-                  <div className="bg-gray-100 text-gray-800 p-3 rounded-2xl rounded-bl-none max-w-[80%] break-words">
+                <div className="flex justify-start">
+                  <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl max-w-[70%] text-gray-800 shadow-sm">
                     <p className="whitespace-pre-line">{m.bot}</p>
-                    <p className="text-xs opacity-70 text-left mt-1">{m.time.split("/")[1] || ""}</p>
-                  </div>
-
-                  {/* быстрые эмодзи-реакции */}
-                  <div className="flex gap-1 mt-1 ml-2">
-                    {["👍", "😂", "🔥", "❤️"].map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => addReaction(i, emoji)}
-                        className="text-lg hover:scale-125 transition-transform"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
                   </div>
                 </div>
               )}
             </div>
-          ))}
-
-          {loading && (
-            <div className="flex justify-start mt-2">
-              <div className="bg-gray-100 text-gray-800 p-3 rounded-2xl rounded-bl-none max-w-[70%] italic text-sm">
-                Роберт печатает{typingDots}
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* INPUT + FILE + EMOJI */}
-        <div className="flex gap-2 items-center mt-auto relative">
-          {/* FILE */}
-          <label className="cursor-pointer bg-orange-100 border border-orange-300 rounded-full px-3 py-2 hover:bg-orange-200 transition">
-            📎
-            <input
-              type="file"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="hidden"
-            />
-          </label>
-
-          {/* EMOJI PICKER */}
-          <div className="relative">
-            <button
-              onClick={() => setShowEmojiPicker((p) => !p)}
-              className="text-2xl px-2 hover:scale-110 transition-transform"
-            >
-              😀
-            </button>
-            {showEmojiPicker && (
-              <div className="absolute bottom-10 left-0 bg-white border rounded-lg shadow-md p-2 flex flex-wrap gap-1 w-48">
-                {EMOJIS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => addEmoji(emoji)}
-                    className="text-xl hover:scale-125 transition-transform"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* TEXTAREA */}
-          <textarea
-            className="flex-1 border border-orange-300 rounded-2xl px-4 py-2 focus:ring-2 focus:ring-orange-400 outline-none text-gray-800 placeholder-gray-400 bg-white resize-none"
-            rows={2}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="Напиши сообщение Роберту... (Shift + Enter — новая строка)"
-          />
-
-          {/* SEND */}
-          <button
-            onClick={sendMessage}
-            disabled={loading}
-            className={`flex items-center justify-center bg-orange-500 text-white px-5 py-2 rounded-full transition-all hover:bg-orange-600 ${
-              loading ? "opacity-70 cursor-not-allowed" : ""
-            }`}
-          >
-            {loading ? (
-              <div className="flex gap-1 items-center">
-                <span className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.2s]"></span>
-                <span className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.1s]"></span>
-                <span className="w-2 h-2 bg-white rounded-full animate-bounce"></span>
-              </div>
-            ) : (
-              "➤"
-            )}
-          </button>
-        </div>
-
-        {/* SELECTED FILE */}
-        {file && (
-          <p className="text-sm text-gray-600 mt-2 text-center">
-            📄 Прикреплён файл: <span className="font-medium">{file.name}</span>
-          </p>
+          ))
         )}
-      </div>
+
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl italic text-sm text-gray-600">
+              Роберт печатает{typingDots}
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </main>
+
+      {/* INPUT AREA */}
+      <footer
+        className={`p-4 border-t border-gray-200 bg-white flex items-end gap-3 transition-all duration-300 ${
+          messages.length === 0 ? "md:mb-20" : ""
+        }`}
+      >
+        {/* FILE */}
+        <label className="cursor-pointer text-xl text-gray-500 hover:text-gray-700 transition">
+          📎
+          <input
+            type="file"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="hidden"
+          />
+        </label>
+
+        {/* TEXTAREA */}
+        <textarea
+          ref={textareaRef}
+          className="flex-1 bg-gray-50 border border-gray-300 rounded-2xl px-4 py-2 text-gray-800 focus:ring-2 focus:ring-gray-400 outline-none resize-none max-h-48 overflow-y-auto"
+          rows={1}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyPress}
+          placeholder="Введите сообщение..."
+        />
+
+        {/* SEND */}
+        <button
+          onClick={sendMessage}
+          disabled={loading}
+          className={`flex items-center justify-center w-10 h-10 rounded-full bg-gray-800 text-white hover:bg-gray-700 transition ${
+            loading ? "opacity-70 cursor-not-allowed" : ""
+          }`}
+        >
+          ➤
+        </button>
+      </footer>
     </div>
   )
 }
